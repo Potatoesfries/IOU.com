@@ -1,6 +1,6 @@
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable'
 import { Outlet } from 'react-router'
-import LeftSideBar from './components/LeftsideBar'
+import LeftSideBar from './components/LeftSideBar'
 import TopBar from './components/TopBar'
 const MainLayout = () => {
 
