@@ -1,12 +1,12 @@
 import Router from "express"
-import { getAllNotes, createNotes, deleteNotes, updateNotes, getNotesById } from "../controllers/notes.controllers.js"
+import { getAllDebtNotes, createDebtNotes, deleteDebtNotes, updateDebtNotes, getDebtNotesById } from "../controllers/debtNotes.controllers.js"
 
 const router = Router()
 
-router.get("/", getAllNotes)
-router.post("/", createNotes)
-router.get("/:noteId", getNotesById)
-router.delete("/:id", deleteNotes)
-router.put("/:id", updateNotes)
+router.get("/", getAllDebtNotes)
+router.post("/", createDebtNotes)
+router.get("/:id", getDebtNotesById)
+router.delete("/:id", deleteDebtNotes)
+router.put("/:", updateDebtNotes)
 
 export default router

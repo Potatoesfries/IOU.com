@@ -17,7 +17,7 @@ const MainLayout = () => {
           <LeftSideBar/>
         </ResizablePanel>
         <ResizableHandle />
-        {/* main content */}
+        {/* main content */}  
         <ResizablePanel>
           <Outlet />
         </ResizablePanel>

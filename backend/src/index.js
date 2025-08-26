@@ -1,11 +1,12 @@
 import express from "express"
 import dotenv from "dotenv"
-import noteRoutes from "./routes/notes.route.js"
+import noteRoutes from "./routes/notes.route.js" 
 import { connectDb } from "./lib/db.js"
 import cors from "cors"
 import path from "path"
 
 const app = express()
+
 
 dotenv.config()
 
@@ -22,7 +23,10 @@ const __dirname = path.resolve();
 // middleware to set data into the body of the request
 app.use(express.json())
 
-app.use("/api/notes", noteRoutes)
+
+
+// Add this line with your other routes
+app.use("/api/debt-notes", noteRoutes)
 
 if(process.env.NODE_ENV === "production"){
         const frontendDist = path.join(__dirname, "../frontend/dist");
