@@ -13,7 +13,7 @@ const MainLayout = () => {
         
 
         {/* left side */}
-        <ResizablePanel defaultSize={30} minSize={30} maxSize={45}>
+        <ResizablePanel defaultSize={20} minSize={20} maxSize={30}>
           <LeftSideBar/>
         </ResizablePanel>
         <ResizableHandle />
