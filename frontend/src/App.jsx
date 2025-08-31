@@ -1,5 +1,5 @@
 import {Route, Routes} from 'react-router'
-import { AuthenticateWithRedirectCallback, SignedIn, SignedOut, RedirectToSignIn } from '@clerk/clerk-react'
+import { AuthenticateWithRedirectCallback, SignedIn, SignedOut } from '@clerk/clerk-react'
 import MainLayout from './Layout/MainLayout.jsx'
 import Note from './pages/Note.jsx'
 import { Toaster } from 'react-hot-toast'
@@ -11,31 +11,33 @@ const App = () => {
   return (
     <>
       <Routes>
-        {/* Public routes */}
+        {/* Root route - conditional based on auth status */}
         <Route path='/' element={
-          <SignedOut>
-            <Login />
-          </SignedOut>
-        } />
+          <>
+            <SignedOut>
+              <Login />
+            </SignedOut>
+            <SignedIn>
+              <MainLayout />
+            </SignedIn>
+          </>
+        }>
+          {/* Nested routes only accessible when signed in */}
+          <Route index element={
+            <SignedIn>
+              <Note />
+            </SignedIn>
+          } />
+          <Route path='debt-notes/:id' element={
+            <SignedIn>
+              <NotePage />
+            </SignedIn>
+          } />
+        </Route>
+
+        {/* Auth callback routes */}
         <Route path='/sso-callback' element={<AuthenticateWithRedirectCallback />} />
         <Route path="/auth-callback" element={<AuthCallBackPage />} />
-
-        {/* Protected routes */}
-        <Route path='/debt-notes' element={
-          <SignedIn>
-            <MainLayout />
-          </SignedIn>
-        }>
-          <Route index element={<Note />} />
-          <Route path=':id' element={<NotePage />} />
-        </Route>
-        
-        {/* Catch all protected routes and redirect if not signed in */}
-        <Route path='/debt-notes/*' element={
-          <SignedOut>
-            <RedirectToSignIn />
-          </SignedOut>
-        } />
       </Routes>
       <Toaster />
     </>

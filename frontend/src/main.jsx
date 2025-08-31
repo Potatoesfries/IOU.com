@@ -16,8 +16,6 @@ createRoot(document.getElementById('root')).render(
     <ClerkProvider 
     publishableKey={PUBLISHABLE_KEY} 
     afterSignOutUrl='/'
-    afterSignInUrl='/debt-notes'  
-    afterSignUpUrl='/auth-callback'  
     >
       <AuthProvider>
         <BrowserRouter>

@@ -1,18 +1,23 @@
 import SignInOAuthButton from "@/button/SignInOAuthButton"
-import { SignedIn, SignedOut, UserButton } from "@clerk/clerk-react"
+import { useAuth } from "@clerk/clerk-react"
 
-const HomePage = () => {
+const Login = () => {
+  const { isLoaded } = useAuth()
+
+  // Show loading while Clerk is determining auth state
+  if (!isLoaded) {
+    return (
+      <div className="text-center h-full flex items-center justify-center">
+        <div>Loading...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="text-center h-full flex items-center justify-center gap-3">
-      <SignedIn>
-        welcome
-      </SignedIn>
-      <SignedOut>
-         <SignInOAuthButton />
-      </SignedOut>
-      <UserButton />
+      <SignInOAuthButton />
     </div>
   )
 }
 
-export default HomePage
+export default Login

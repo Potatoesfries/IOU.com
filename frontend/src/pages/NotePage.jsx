@@ -85,7 +85,7 @@ const fetchDebtNotesById = async () => {
       
       toast.success("Debt note deleted successfully")
       
-      navigate("/debt-notes")
+      navigate("/")
       setTimeout(() => {
         window.location.reload();
       }, 400)

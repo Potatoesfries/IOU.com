@@ -3,7 +3,6 @@ import { useAuth } from "@clerk/clerk-react"
 import { Loader } from "lucide-react"
 import { useEffect, useState } from "react"
 
-
 const updateApiToken = (token) => {
     if(token){
         axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`
@@ -13,9 +12,7 @@ const updateApiToken = (token) => {
     }
 }
 
-
 const AuthProvider = ({children}) => {
-
     const {getToken} = useAuth()
     const [loading, setLoading] = useState(true)
 
@@ -44,11 +41,11 @@ const AuthProvider = ({children}) => {
         )
     }
 
-  return (
-    <div>
-      {children}
-    </div>
-  )
+    return (
+        <div>
+            {children}
+        </div>
+    )
 }
 
 export default AuthProvider
