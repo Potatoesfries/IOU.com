@@ -1,3 +1,4 @@
+import { SignOutButton } from "@clerk/clerk-react";
 import { Link } from "react-router";
 
 const DebtTopBar = () => {
@@ -10,6 +11,7 @@ const DebtTopBar = () => {
           <span className="text-white font-bold text-sm">$</span>
         </div>
         <span className="text-lg font-semibold text-gray-800">Debt Tracker</span>
+        <SignOutButton/>
       </Link>
 
     </div>

@@ -1,6 +1,7 @@
 import express from "express"
 import dotenv from "dotenv"
 import noteRoutes from "./routes/notes.route.js" 
+import authRoutes from "./routes/auth.route.js"
 import { connectDb } from "./lib/db.js"
 import cors from "cors"
 import path from "path"
@@ -24,8 +25,8 @@ const __dirname = path.resolve();
 app.use(express.json())
 
 
-
 // Add this line with your other routes 
+app.use("/api/auth", authRoutes)
 app.use("/api/debt-notes", noteRoutes)
 
 if(process.env.NODE_ENV === "production"){

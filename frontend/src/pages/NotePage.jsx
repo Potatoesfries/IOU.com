@@ -28,8 +28,6 @@ const fetchDebtNotesById = async () => {
   try {
     const res = await axiosInstance.get(`/debt-notes/${id}`)
     
-   
-    
     // Check if res.data exists and has content
     if (res.data) {
       setCurrentDebtNote(res.data)

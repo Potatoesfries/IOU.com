@@ -2,9 +2,11 @@ import Debt from "../model/debtNotes.model.js"
 
 export const getAllDebtNotes = async (req, res) => {
     try {
-        const debtNotes = await Debt.find()
+        const clerkId = req.auth.userId; // Changed from req.user.userId to req.auth.userId
+        const debtNotes = await Debt.find({ clerkId: clerkId }) // Only get notes for this user
         res.status(200).json(debtNotes)
     } catch (error) {
+        console.log("Full error:", error); 
         res.status(500).json({message: error.message})
     }
 }
@@ -13,6 +15,7 @@ export const createDebtNotes = async(req, res) => {
     try {
         // destructure the data from the body
         const {debtorName, debtorEmail, debtorPhone, amount, dueDate, status} = req.body
+        const clerkId = req.auth.userId; // Changed from req.user.userId to req.auth.userId
 
         // create new debt note by using the model and then place those data into a new debt object 
         const debtNote = new Debt({
@@ -21,7 +24,8 @@ export const createDebtNotes = async(req, res) => {
             debtorPhone, 
             amount, 
             dueDate, 
-            status
+            status,
+            clerkId: clerkId // Link note to user
         }) 
         
         // save the debt note using the debtNote.save() function it will be saved to the debt database
@@ -37,7 +41,10 @@ export const createDebtNotes = async(req, res) => {
 export const deleteDebtNotes = async (req, res) => {
     try {
         const {id} = req.params
-        const debtNote = await Debt.findByIdAndDelete(id) 
+        const clerkId = req.auth.userId; // Changed from req.user.clerkId to req.auth.userId
+        
+        // Only delete if note belongs to this user
+        const debtNote = await Debt.findOneAndDelete({ _id: id, clerkId: clerkId }) 
         
         if(!debtNote){
             return res.status(404).json({message: "Debt note not found"})
@@ -53,16 +60,22 @@ export const updateDebtNotes = async (req, res) => {
     try {
         const {id} = req.params
         const { debtorName, debtorEmail, debtorPhone, amount, dueDate, status, archivedAt} = req.body
+        const clerkId = req.auth.userId; // Changed from req.user.clerkId to req.auth.userId
         
-        const debtNote = await Debt.findByIdAndUpdate(id, {
-            debtorName, 
-            debtorEmail, 
-            debtorPhone, 
-            amount, 
-            dueDate, 
-            status,
-            archivedAt
-        }, { new: true }) // Returns the updated document
+        // Only update if note belongs to this user
+        const debtNote = await Debt.findOneAndUpdate(
+            { _id: id, clerkId: clerkId }, // Find by ID AND clerkId
+            {
+                debtorName, 
+                debtorEmail, 
+                debtorPhone, 
+                amount, 
+                dueDate, 
+                status,
+                archivedAt
+            }, 
+            { new: true } // Returns the updated document
+        )
         
         if(!debtNote){
             return res.status(404).json({message: "Debt note not found"})
@@ -78,8 +91,10 @@ export const updateDebtNotes = async (req, res) => {
 export const getDebtNotesById = async (req, res) => {
     try {
         const {id} = req.params
+        const clerkId = req.auth.userId; // Changed from req.user.clerkId to req.auth.userId
         
-        const debtNote = await Debt.findById(id)
+        // Only get note if it belongs to this user
+        const debtNote = await Debt.findOne({ _id: id, clerkId: clerkId })
 
         if(!debtNote){
             return res.status(404).json({message: "Debt note not found"})
@@ -90,4 +105,3 @@ export const getDebtNotesById = async (req, res) => {
         res.status(500).json({message: error.message})
     }
 }
-

@@ -1,6 +1,10 @@
 import mongoose from "mongoose";
 
 const debtSchema = new mongoose.Schema({
+    clerkId: {
+        type: String,
+        required: true
+    },
     
     debtorName: {
         type: String,
