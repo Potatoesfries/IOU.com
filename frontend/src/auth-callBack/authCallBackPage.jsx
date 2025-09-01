@@ -25,7 +25,7 @@ const AuthCallBackPage = () => {
         }) 
         
         // Only navigate on success
-        navigate('/debt-notes')
+        navigate('/')
         
       } catch (error) {
         console.log("error in auth callback", error)
