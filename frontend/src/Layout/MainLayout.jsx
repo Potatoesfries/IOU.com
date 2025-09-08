@@ -38,10 +38,10 @@ const MainLayout = () => {
   return (
     <div className="h-screen flex flex-col">
       {/* TopBar with menu toggle on mobile */}
-      <div className="flex items-center  p-2">
+      <div className="flex items-center p-2">
         {isMobile && (
           <button
-            className="p-2 rounded-lg hover:bg-gray-100"
+            className=" rounded-lg hover:bg-gray-100"
             onClick={toggleSidebar}
           >
             <Menu size={20} />
