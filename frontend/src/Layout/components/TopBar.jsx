@@ -1,13 +1,22 @@
 import { Button } from "@/components/ui/button"
 import { SignOutButton } from "@clerk/clerk-react"
-import { Plus, Search } from "lucide-react"
+import { Search } from "lucide-react"
+import iouImage from "@/img/iou.png"
 
 export default function DebtTopBar() {
   return (
     <header className="w-full bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
-      {/* Title */}
-      <h1 className="text-lg font-semibold text-gray-900"><a href="/">IOU</a></h1>
-
+      {/* Title with Logo */}
+      <div className="flex items-center gap-3">
+        <a href="/">
+         <img 
+          src={iouImage} 
+          alt="IOU Logo" 
+          className="w-16 h-16 object-contain -my-2"
+        />
+        </a>
+      </div>
+      
       {/* Actions */}
       <div className="flex items-center gap-3">
         <div className="relative">

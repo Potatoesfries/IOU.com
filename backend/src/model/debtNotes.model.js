@@ -35,7 +35,7 @@ const debtSchema = new mongoose.Schema({
     status: {
         type: String,
         required: true,
-        enum: ['pending', 'paid', 'overdue', 'cancelled'],
+        enum: ['pending', 'paid', 'overdue', 'cancelled'],  
         default: 'pending'
     },
     createdAt: {

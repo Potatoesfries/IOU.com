@@ -34,6 +34,7 @@ export const createDebtNotes = async(req, res) => {
         // send a response with a status of 201 which mean created successful 
         res.status(201).json(savedDebtNote)
     } catch (error) {
+        console.log("Full error:", error);
         res.status(500).json({message: error.message})
     }
 }

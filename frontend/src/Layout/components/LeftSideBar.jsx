@@ -22,6 +22,38 @@ import { toast } from "react-hot-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "react-router";
 
+// Validation functions
+const validateEmail = (email) => {
+  if (!email.trim()) return true; // Allow empty email (optional field)
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const validatePhone = (phone) => {
+  if (!phone.trim()) return true; // Allow empty phone (optional field)
+  // Remove all non-digit characters for validation
+  const digitsOnly = phone.replace(/\D/g, '');
+  // Must be between 10-15 digits (covers most international formats)
+  return digitsOnly.length >= 9 && digitsOnly.length <= 15;
+};
+
+const formatPhoneNumber = (phone) => {
+  // Remove all non-digit characters
+  const digitsOnly = phone.replace(/\D/g, '');
+  
+  // Format as (XXX) XXX-XXXX for US numbers (10 digits)
+  if (digitsOnly.length === 9 || digitsOnly.length === 10) {
+    return `(${digitsOnly.slice(0, 3)}) ${digitsOnly.slice(3, 6)}-${digitsOnly.slice(6)}`;
+  }
+  
+  // For other lengths, just return the digits with some basic formatting
+  if (digitsOnly.length > 10) {
+    return `+${digitsOnly.slice(0, -10)} (${digitsOnly.slice(-10, -7)}) ${digitsOnly.slice(-7, -4)}-${digitsOnly.slice(-4)}`;
+  }
+  
+  return digitsOnly;
+};
+
 const LeftSideBar = () => {
   const [debtNotes, setDebtNotes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -50,6 +82,7 @@ const LeftSideBar = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
+      // Basic required field validation
       if (
         !newDebtNote.debtorName.trim() ||
         !newDebtNote.amount ||
@@ -62,6 +95,16 @@ const LeftSideBar = () => {
 
       if (newDebtNote.amount <= 0) {
         return toast.error("Amount must be greater than 0");
+      }
+
+      // Email validation (if provided)
+      if (newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)) {
+        return toast.error("Please enter a valid email address");
+      }
+
+      // Phone validation (if provided)
+      if (newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone)) {
+        return toast.error("Please enter a valid phone number");
       }
 
       await axiosInstance.post("/debt-notes", {
@@ -181,7 +224,7 @@ const LeftSideBar = () => {
                 </DialogDescription>
               </DialogHeader>
 
-              {/* Form */}
+              {/* Form with Enhanced Validation */}
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -248,24 +291,50 @@ const LeftSideBar = () => {
                           debtorEmail: e.target.value,
                         })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                        newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-300'
+                      }`}
                     />
+                    {newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail) && (
+                      <p className="text-xs text-red-600 mt-1">Please enter a valid email address</p>
+                    )}
                   </div>
 
                   <div className="space-y-1">
                     <label className="text-sm text-gray-600 block">Phone</label>
                     <input
                       type="tel"
-                      placeholder="Enter phone..."
+                      placeholder="Enter phone number..."
                       value={newDebtNote.debtorPhone}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        const inputValue = e.target.value;
+                        // Only allow numbers, spaces, parentheses, hyphens, and plus signs
+                        const sanitizedValue = inputValue.replace(/[^0-9\s\(\)\-\+]/g, '');
                         setNewDebtNote({
                           ...newDebtNote,
-                          debtorPhone: e.target.value,
-                        })
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                          debtorPhone: sanitizedValue,
+                        });
+                      }}
+                      onBlur={(e) => {
+                        // Format the phone number when user leaves the field
+                        if (e.target.value) {
+                          setNewDebtNote({
+                            ...newDebtNote,
+                            debtorPhone: formatPhoneNumber(e.target.value),
+                          });
+                        }
+                      }}
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${
+                        newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone)
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-300'
+                      }`}
                     />
+                    {newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone) && (
+                      <p className="text-xs text-red-600 mt-1">Please enter a valid phone number (10-15 digits)</p>
+                    )}
                   </div>
                 </div>
 
@@ -300,7 +369,9 @@ const LeftSideBar = () => {
                     loading ||
                     !newDebtNote.debtorName.trim() ||
                     !newDebtNote.amount ||
-                    !newDebtNote.dueDate
+                    !newDebtNote.dueDate ||
+                    (newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)) ||
+                    (newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone))
                   }
                   className="bg-blue-600 hover:bg-blue-700"
                 >
@@ -364,8 +435,8 @@ const LeftSideBar = () => {
 
                     {(debt.debtorEmail || debt.debtorPhone) && (
                       <div className="mt-2 text-xs text-gray-500 space-y-1">
-                        {debt.debtorEmail && <p>📧 {debt.debtorEmail}</p>}
-                        {debt.debtorPhone && <p>📞 {debt.debtorPhone}</p>}
+                        {debt.debtorEmail && <p>Email: {debt.debtorEmail}</p>}
+                        {debt.debtorPhone && <p>No. {debt.debtorPhone}</p>}
                       </div>
                     )}
                   </Link>
