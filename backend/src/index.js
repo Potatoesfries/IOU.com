@@ -12,10 +12,13 @@ dotenv.config();
 const app = express();
 const port = process.env.PORT || 5001;
 
-// CORS setup (adjust origin later for production if needed)
+// CORS setup (allow both local dev and deployed site)
 app.use(
   cors({
-    origin: "http://localhost:5173", // for dev
+    origin: [
+      "http://localhost:5173",       // local dev
+      "https://iou-com.onrender.com" // deployed frontend
+    ],
     credentials: true,
   })
 );
@@ -33,12 +36,11 @@ app.use("/api/debt-notes", noteRoutes);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const frontendDist = path.join(__dirname, "../frontend/dist");
+// Go 2 levels up: backend/src -> backend -> root -> frontend/dist
+const frontendDist = path.join(__dirname, "../../frontend/dist");
 
-// Serve static files from Vite build
 app.use(express.static(frontendDist));
 
-// Catch-all route → send index.html
 app.get("*", (req, res) => {
   res.sendFile(path.join(frontendDist, "index.html"));
 });
