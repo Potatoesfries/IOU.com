@@ -5,14 +5,14 @@ import iouImage from "@/img/iou.png"
 
 export default function DebtTopBar() {
   return (
-    <header className="w-full bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+    <header className="w-full bg-white border-b border-gray-200 px-2 py-3 flex items-center justify-between">
       {/* Title with Logo */}
       <div className="flex items-center gap-3">
         <a href="/">
          <img 
           src={iouImage} 
           alt="IOU Logo" 
-          className="w-16 h-16 object-contain -my-2"
+          className="w-16 h-16 object-contain -my-2 "
         />
         </a>
       </div>
