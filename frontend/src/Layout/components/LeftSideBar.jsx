@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { axiosInstance } from "../../lib/axios";
 import moment from "moment";
+import { User, LayoutDashboard } from "lucide-react"; 
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { useUser } from "@clerk/clerk-react";
 import {
   Dialog,
   DialogTrigger,
@@ -21,43 +24,41 @@ import { Button } from "@/components/ui/button";
 import { toast } from "react-hot-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "react-router";
+import { useSearch } from "../../context/SearchContext.jsx";
 
-// Validation functions
+// Validation functions (keeping existing ones)
 const validateEmail = (email) => {
-  if (!email.trim()) return true; // Allow empty email (optional field)
+  if (!email.trim()) return true;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 };
 
 const validatePhone = (phone) => {
-  if (!phone.trim()) return true; // Allow empty phone (optional field)
-  // Remove all non-digit characters for validation
+  if (!phone.trim()) return true;
   const digitsOnly = phone.replace(/\D/g, '');
-  // Must be between 10-15 digits (covers most international formats)
   return digitsOnly.length >= 9 && digitsOnly.length <= 15;
 };
 
 const formatPhoneNumber = (phone) => {
-  // Remove all non-digit characters
   const digitsOnly = phone.replace(/\D/g, '');
-  
-  // Format as (XXX) XXX-XXXX for US numbers (10 digits)
+
   if (digitsOnly.length === 9 || digitsOnly.length === 10) {
     return `(${digitsOnly.slice(0, 3)}) ${digitsOnly.slice(3, 6)}-${digitsOnly.slice(6)}`;
   }
-  
-  // For other lengths, just return the digits with some basic formatting
+
   if (digitsOnly.length > 10) {
     return `+${digitsOnly.slice(0, -10)} (${digitsOnly.slice(-10, -7)}) ${digitsOnly.slice(-7, -4)}-${digitsOnly.slice(-4)}`;
   }
-  
+
   return digitsOnly;
 };
 
 const LeftSideBar = () => {
+  const { user } = useUser();
   const [debtNotes, setDebtNotes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [debtDialogOpen, setDebtDialogOpen] = useState(false);
+  const { searchTerm } = useSearch();
 
   const [newDebtNote, setNewDebtNote] = useState({
     debtorName: "",
@@ -67,6 +68,70 @@ const LeftSideBar = () => {
     dueDate: "",
     status: "pending",
   });
+
+  // Helper functions - defined before they're used
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount || 0);
+  };
+
+  const getDaysUntilDue = (dueDate) => {
+    const days = moment(dueDate).diff(moment(), "days");
+    if (days < 0) return `${Math.abs(days)} days overdue`;
+    if (days === 0) return "Due today";
+    return `${days} days left`;
+  };
+
+  // Enhanced search function
+  const filteredDebtNotes = useMemo(() => {
+    if (!searchTerm.trim()) return debtNotes;
+
+    const search = searchTerm.toLowerCase().trim();
+
+    return debtNotes.filter(debt => {
+      // Search in debtor name
+      if (debt.debtorName?.toLowerCase().includes(search)) return true;
+
+      // Search in amount (both raw number and formatted currency)
+      const amount = debt.amount?.toString();
+      const formattedAmount = formatCurrency(debt.amount).toLowerCase();
+      if (amount?.includes(search) || formattedAmount.includes(search)) return true;
+
+      // Search in email
+      if (debt.debtorEmail?.toLowerCase().includes(search)) return true;
+
+      // Search in phone number (both formatted and raw)
+      if (debt.debtorPhone?.toLowerCase().includes(search)) return true;
+
+      // Search in status
+      if (debt.status?.toLowerCase().includes(search)) return true;
+
+      // Search in due date (multiple formats)
+      if (debt.dueDate) {
+        const dueDate = moment(debt.dueDate);
+        const dateFormats = [
+          dueDate.format('YYYY-MM-DD').toLowerCase(),
+          dueDate.format('MMM D, YYYY').toLowerCase(),
+          dueDate.format('MMMM D, YYYY').toLowerCase(),
+          dueDate.format('MM/DD/YYYY').toLowerCase(),
+          dueDate.format('DD/MM/YYYY').toLowerCase(),
+          dueDate.format('YYYY').toLowerCase(),
+          dueDate.format('MMM').toLowerCase(),
+          dueDate.format('MMMM').toLowerCase(),
+        ];
+
+        if (dateFormats.some(format => format.includes(search))) return true;
+      }
+
+      // Search in days until due
+      const daysText = getDaysUntilDue(debt.dueDate).toLowerCase();
+      if (daysText.includes(search)) return true;
+
+      return false;
+    });
+  }, [debtNotes, searchTerm]);
 
   const fetchDebtNotes = async () => {
     try {
@@ -82,7 +147,6 @@ const LeftSideBar = () => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      // Basic required field validation
       if (
         !newDebtNote.debtorName.trim() ||
         !newDebtNote.amount ||
@@ -97,12 +161,10 @@ const LeftSideBar = () => {
         return toast.error("Amount must be greater than 0");
       }
 
-      // Email validation (if provided)
       if (newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)) {
         return toast.error("Please enter a valid email address");
       }
 
-      // Phone validation (if provided)
       if (newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone)) {
         return toast.error("Please enter a valid phone number");
       }
@@ -161,22 +223,8 @@ const LeftSideBar = () => {
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount || 0);
-  };
-
-  const getDaysUntilDue = (dueDate) => {
-    const days = moment(dueDate).diff(moment(), "days");
-    if (days < 0) return `${Math.abs(days)} days overdue`;
-    if (days === 0) return "Due today";
-    return `${days} days left`;
-  };
-
   const getTotalDebt = () => {
-    return debtNotes
+    return filteredDebtNotes
       .filter((debt) => debt.status !== "paid" && debt.status !== "cancelled")
       .reduce((total, debt) => total + (debt.amount || 0), 0);
   };
@@ -190,17 +238,69 @@ const LeftSideBar = () => {
       {/* Header Section */}
       <div className="p-5 border-b border-gray-200 bg-white flex-shrink-0">
         <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">Debt Records</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {debtNotes.length} {debtNotes.length === 1 ? "record" : "records"}
-            </p>
-            <p className="text-sm text-gray-700 font-medium mt-2">
-              Total Outstanding:{" "}
-              <span className="font-semibold text-gray-900">
-                {formatCurrency(getTotalDebt())}
-              </span>
-            </p>
+          {/* Left: Profile */}
+          <div className="flex items-center gap-3">
+ <Popover>
+  <div className="flex items-center gap-3">
+    <PopoverTrigger asChild>
+      {user?.imageUrl ? (
+        <img
+          src={user.imageUrl}
+          alt={user.fullName || "User"}
+          className="w-10 h-10 rounded-full object-cover cursor-pointer hover:ring-2 hover:ring-blue-500"
+        />
+      ) : (
+        <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold cursor-pointer hover:ring-2 hover:ring-blue-500">
+          {user?.firstName?.charAt(0).toUpperCase() || "U"}
+        </div>
+      )}
+    </PopoverTrigger>
+
+    {/* name + record count stay outside */}
+    <div>
+      <p className="font-medium text-gray-900">
+        {user?.fullName || "Anonymous"}
+      </p>
+      <p className="text-sm text-gray-500 mt-1">
+        {searchTerm ? (
+          <>
+            {filteredDebtNotes.length} of {debtNotes.length} records
+            <span className="text-blue-600 font-medium ml-1">
+              matching "{searchTerm}"
+            </span>
+          </>
+        ) : (
+          <>
+            {debtNotes.length}{" "}
+            {debtNotes.length === 1 ? "record" : "records"}
+          </>
+        )}
+      </p>
+    </div>
+  </div>
+
+  <PopoverContent
+    className="w-48 rounded-lg shadow-lg border border-gray-200 p-2 bg-white"
+    sideOffset={8} // moves it a bit away from the trigger
+    align="start"  // align to left edge but with offset
+  >
+    <Link
+      to="/profile"
+      className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-gray-100 transition"
+    >
+      <User size={16} className="text-gray-600" />
+      <span>Profile</span>
+    </Link>
+    <Link
+      to="/dashboard"
+      className="flex items-center gap-2 px-3 py-2 text-sm rounded-md hover:bg-gray-100 transition"
+    >
+      <LayoutDashboard size={16} className="text-gray-600" />
+      <span>Dashboard</span>
+    </Link>
+  </PopoverContent>
+</Popover>
+
           </div>
 
           <Dialog open={debtDialogOpen} onOpenChange={setDebtDialogOpen}>
@@ -228,9 +328,7 @@ const LeftSideBar = () => {
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-sm text-gray-600 block">
-                      Debtor Name *
-                    </label>
+                    <label className="text-sm text-gray-600 block">Debtor Name *</label>
                     <input
                       type="text"
                       placeholder="Enter name..."
@@ -246,9 +344,7 @@ const LeftSideBar = () => {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-sm text-gray-600 block">
-                      Amount *
-                    </label>
+                    <label className="text-sm text-gray-600 block">Amount *</label>
                     <input
                       type="number"
                       step="0.01"
@@ -291,15 +387,17 @@ const LeftSideBar = () => {
                           debtorEmail: e.target.value,
                         })
                       }
-                      className={`w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                        newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)
+                        ? "border-red-300 bg-red-50"
+                        : "border-gray-300"
+                        }`}
                     />
-                    {newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail) && (
-                      <p className="text-xs text-red-600 mt-1">Please enter a valid email address</p>
-                    )}
+                    {newDebtNote.debtorEmail &&
+                      !validateEmail(newDebtNote.debtorEmail) && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Please enter a valid email address
+                        </p>
+                      )}
                   </div>
 
                   <div className="space-y-1">
@@ -310,15 +408,13 @@ const LeftSideBar = () => {
                       value={newDebtNote.debtorPhone}
                       onChange={(e) => {
                         const inputValue = e.target.value;
-                        // Only allow numbers, spaces, parentheses, hyphens, and plus signs
-                        const sanitizedValue = inputValue.replace(/[^0-9\s\(\)\-\+]/g, '');
+                        const sanitizedValue = inputValue.replace(/[^0-9\s\(\)\-\+]/g, "");
                         setNewDebtNote({
                           ...newDebtNote,
                           debtorPhone: sanitizedValue,
                         });
                       }}
                       onBlur={(e) => {
-                        // Format the phone number when user leaves the field
                         if (e.target.value) {
                           setNewDebtNote({
                             ...newDebtNote,
@@ -326,57 +422,106 @@ const LeftSideBar = () => {
                           });
                         }
                       }}
-                      className={`w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${
-                        newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone)
-                          ? 'border-red-300 bg-red-50'
-                          : 'border-gray-300'
-                      }`}
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm ${newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone)
+                        ? "border-red-300 bg-red-50"
+                        : "border-gray-300"
+                        }`}
                     />
-                    {newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone) && (
-                      <p className="text-xs text-red-600 mt-1">Please enter a valid phone number (10-15 digits)</p>
-                    )}
+                    {newDebtNote.debtorPhone &&
+                      !validatePhone(newDebtNote.debtorPhone) && (
+                        <p className="text-xs text-red-600 mt-1">
+                          Please enter a valid phone number (10-15 digits)
+                        </p>
+                      )}
                   </div>
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-sm text-gray-600 block">Status</label>
-                  <select
-                    value={newDebtNote.status}
-                    onChange={(e) =>
-                      setNewDebtNote({ ...newDebtNote, status: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="paid">Paid</option>
-                    <option value="overdue">Overdue</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
+                  {newDebtNote.dueDate ? (
+                    <select
+                      value={newDebtNote.status}
+                      onChange={(e) =>
+                        setNewDebtNote({ ...newDebtNote, status: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    >
+                      {/* Pending is valid if dueDate >= today */}
+                      <option
+                        value="pending"
+                        disabled={
+                          new Date(newDebtNote.dueDate).setHours(0, 0, 0, 0) <
+                          new Date().setHours(0, 0, 0, 0)
+                        }
+                      >
+                        Pending
+                      </option>
+
+                      <option value="paid">Paid</option>
+
+                      {/* Overdue only if dueDate < today */}
+                      <option
+                        value="overdue"
+                        disabled={
+                          new Date(newDebtNote.dueDate).setHours(0, 0, 0, 0) >=
+                          new Date().setHours(0, 0, 0, 0)
+                        }
+                      >
+                        Overdue
+                      </option>
+
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  ) : (
+                    <p className="text-sm text-gray-500 italic">
+                      Please select a due date before setting a status.
+                    </p>
+                  )}
                 </div>
               </div>
 
-              <DialogFooter className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <DialogFooter className="flex justify-between gap-3 pt-4 border-t border-gray-100">
+                {/* Clear Form Button */}
                 <Button
                   variant="outline"
-                  onClick={() => setDebtDialogOpen(false)}
+                  onClick={() =>
+                    setNewDebtNote({
+                      debtorName: "",
+                      debtorEmail: "",
+                      debtorPhone: "",
+                      amount: "",
+                      dueDate: "",
+                      status: "",
+                    })
+                  }
                   disabled={loading}
                 >
-                  Cancel
+                  Clear
                 </Button>
-                <Button
-                  onClick={handleSubmit}
-                  disabled={
-                    loading ||
-                    !newDebtNote.debtorName.trim() ||
-                    !newDebtNote.amount ||
-                    !newDebtNote.dueDate ||
-                    (newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)) ||
-                    (newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone))
-                  }
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {loading ? "Creating..." : "Create"}
-                </Button>
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setDebtDialogOpen(false)}
+                    disabled={loading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmit}
+                    disabled={
+                      loading ||
+                      !newDebtNote.debtorName.trim() ||
+                      !newDebtNote.amount ||
+                      !newDebtNote.dueDate ||
+                      (newDebtNote.debtorEmail && !validateEmail(newDebtNote.debtorEmail)) ||
+                      (newDebtNote.debtorPhone && !validatePhone(newDebtNote.debtorPhone))
+                    }
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {loading ? "Creating..." : "Create"}
+                  </Button>
+                </div>
               </DialogFooter>
             </DialogContent>
           </Dialog>
@@ -392,17 +537,28 @@ const LeftSideBar = () => {
                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400 mb-3"></div>
                 Loading debt records...
               </div>
-            ) : debtNotes.length === 0 ? (
+            ) : filteredDebtNotes.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 text-center text-gray-500">
                 <CreditCard className="w-10 h-10 mb-3 text-gray-400" />
-                <p className="text-sm">No debt records yet</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Create your first debt record to start tracking.
-                </p>
+                {searchTerm ? (
+                  <>
+                    <p className="text-sm">No records match your search</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Try adjusting your search terms
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm">No debt records yet</p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Create your first debt record to start tracking.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="space-y-3">
-                {debtNotes.map((debt, index) => (
+                {filteredDebtNotes.map((debt, index) => (
                   <Link
                     to={`/debt-notes/${debt._id}`}
                     key={debt._id || index}

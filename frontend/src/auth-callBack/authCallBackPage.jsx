@@ -6,56 +6,61 @@ import { useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 
 const AuthCallBackPage = () => {
-   const{isLoaded, user} = useUser()
-   const navigate = useNavigate()
-   const syncAttempted = useRef(false)
+  const { isLoaded, user } = useUser()
+  const navigate = useNavigate()
+  const syncAttempted = useRef(false)
 
-   useEffect(() => {
+  useEffect(() => {
     const syncUser = async () => {
-      if(!isLoaded || !user) return
-      
+      if (!isLoaded || !user) return
+
       try {
-         await axiosInstance.post("auth/callback",{
-          id:user.id,
-          firstName : user.firstName,
-          lastName : user.lastName,
+        await axiosInstance.post("auth/callback", {
+          id: user.id,
+          firstName: user.firstName,
+          lastName: user.lastName,
           imageUrl: user.imageUrl,
           emailAddresses: user.emailAddresses,
           userName: user.username,
-        }) 
-        
+        })
+
         // Only navigate on success
-        navigate('/')
-        
+        navigate("/")
       } catch (error) {
         console.log("error in auth callback", error)
-        // Navigate to home page on error
-        navigate('/')
+        navigate("/")
       }
-   }
-    
-    if(isLoaded && user && !syncAttempted.current) {
+    }
+
+    if (isLoaded && user && !syncAttempted.current) {
       syncAttempted.current = true
       syncUser()
     }
-   },[isLoaded, user, navigate])
-   
-   // Reset sync attempted when user changes (for logout/login cycles)
-   useEffect(() => {
-     if(!user) {
-       syncAttempted.current = false
-     }
-   }, [user])
+  }, [isLoaded, user, navigate])
+
+  // Reset sync attempted when user changes (for logout/login cycles)
+  useEffect(() => {
+    if (!user) {
+      syncAttempted.current = false
+    }
+  }, [user])
 
   return (
-    <div className='h-screen w-full bg-black flex items-center justify-center'>
-      <Card className='w-[90%] max-w-md bg-zinc-900 border-zinc-800'>
-        <CardContent className='flex flex-col items-center gap-4 pt-6'>
-        <Loader className='size-6 bg-zinc-600 animate-spin' />
-        <h3 className='text-zinc-400 text-xl font-bold'>logging you in</h3>
-        <p className='text-zinc-400 text-sm'>Redirecting....</p>
+    <div className="h-screen w-full bg-white flex items-center justify-center">
+      <Card className="w-[90%] max-w-md bg-white border border-gray-200 shadow-md">
+        <CardContent className="flex flex-col items-center gap-4 pt-8 pb-8">
+          <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-50">
+            <Loader className="size-6 text-blue-600 animate-spin" />
+          </div>
+
+          <h3 className="text-gray-900 text-lg font-semibold">
+            Logging you in...
+          </h3>
+          <p className="text-gray-500 text-sm text-center">
+            Redirecting you to your account.
+          </p>
         </CardContent>
-      </Card> 
+      </Card>
     </div>
   )
 }

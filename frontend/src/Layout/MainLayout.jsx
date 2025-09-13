@@ -12,7 +12,7 @@ const MainLayout = () => {
 
   // Detect screen size
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768); // Tailwind md breakpoint
+    const handleResize = () => setIsMobile(window.innerWidth < 768); 
     handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
