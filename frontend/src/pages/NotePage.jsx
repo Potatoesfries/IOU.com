@@ -13,6 +13,16 @@ import {
   AlertTriangle,
   Download,
   FileText,
+  Camera,
+  MapPin,
+  UserCheck,
+  Shield,
+  Plus,
+  X,
+  ArrowLeft,
+  FileCheck,
+  Percent,
+  TrendingUp,
 } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { axiosInstance } from '../lib/axios'
@@ -47,7 +57,12 @@ import {
 import { Button } from '@/components/ui/button'
 
 const DebtNotePage = () => {
-  const [currentDebtNote, setCurrentDebtNote] = useState({})
+  const [currentDebtNote, setCurrentDebtNote] = useState({
+    hasGuarantor: false,
+    guarantor: null,
+    hasContract: false,
+    contract: null,
+  })
   const [loading, setLoading] = useState(false)
   const [emailDialogOpen, setEmailDialogOpen] = useState(false)
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
@@ -59,18 +74,22 @@ const DebtNotePage = () => {
   })
   const [sendingEmail, setSendingEmail] = useState(false)
   const [exporting, setExporting] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
+  const [calculatedAmounts, setCalculatedAmounts] = useState(null)
+  const [calculatingAmounts, setCalculatingAmounts] = useState(false)
   const { id } = useParams()
   const navigate = useNavigate()
   const exportRef = useRef(null)
+  const fileInputRef = useRef(null)
 
-  // EmailJS Configuration - Updated with correct template parameters
   const EMAILJS_CONFIG = {
     serviceId: 'service_na7yzd2',
     templateId: 'template_6xktqx4',
     publicKey: 'B9XpLCPWtNOeZ2RpM'
   }
 
-  // Email templates configuration
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
   const emailTemplates = {
     upcoming: {
       subject: 'Payment Reminder - Due Soon',
@@ -108,7 +127,11 @@ const DebtNotePage = () => {
     try {
       const res = await axiosInstance.get(`/debt-notes/${id}`)
       if (res.data) {
-        setCurrentDebtNote(res.data)
+        setCurrentDebtNote({
+          ...res.data,
+          hasGuarantor: res.data.guarantor ? true : false,
+          hasContract: res.data.contract ? true : false,
+        })
       } else {
         toast.error('No debt note data found')
       }
@@ -123,30 +146,137 @@ const DebtNotePage = () => {
     }
   }
 
+  const fetchCalculatedAmounts = async () => {
+    setCalculatingAmounts(true)
+    try {
+      const res = await axiosInstance.get(`/debt-notes/${id}/calculate`)
+      setCalculatedAmounts(res.data)
+    } catch (error) {
+      console.error('Failed to calculate amounts:', error)
+      toast.error('Failed to calculate amounts')
+    } finally {
+      setCalculatingAmounts(false)
+    }
+  }
+
+  const handleProfileImageUpload = async (event) => {
+    const file = event.target.files[0]
+    if (!file) return
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
+    if (!allowedTypes.includes(file.type)) {
+      toast.error('Please select a valid image file (JPG, PNG, GIF)')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image must be less than 5MB')
+      return
+    }
+
+    setUploadingImage(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('debtorProfilePic', file)
+      formData.append('debtorName', currentDebtNote.debtorName || '')
+      formData.append('debtorEmail', currentDebtNote.debtorEmail || '')
+      formData.append('debtorPhone', currentDebtNote.debtorPhone || '')
+      formData.append('debtorAddress', currentDebtNote.debtorAddress || '')
+      formData.append('amount', currentDebtNote.amount || 0)
+      formData.append('dueDate', currentDebtNote.dueDate || '')
+      formData.append('status', currentDebtNote.status || 'pending')
+
+      if (currentDebtNote.hasGuarantor && currentDebtNote.guarantor) {
+        formData.append('guarantorName', currentDebtNote.guarantor.name || '')
+        formData.append('guarantorPhone', currentDebtNote.guarantor.phone || '')
+      }
+
+      // Add contract data to formData if exists
+      if (currentDebtNote.hasContract) {
+        formData.append('interestEnabled', currentDebtNote.contract?.interest?.enabled || false)
+        formData.append('interestEveryDays', currentDebtNote.contract?.interest?.everyDays || 0)
+        formData.append('interestChargeAmount', currentDebtNote.contract?.interest?.chargeAmount || 0)
+        formData.append('lateFeeEnabled', currentDebtNote.contract?.lateFee?.enabled || false)
+        formData.append('lateFeeEveryDays', currentDebtNote.contract?.lateFee?.everyDays || 0)
+        formData.append('lateFeeChargeAmount', currentDebtNote.contract?.lateFee?.chargeAmount || 0)
+      }
+
+      const response = await axiosInstance.put(`/debt-notes/${id}`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+
+      setCurrentDebtNote(prev => ({
+        ...prev,
+        ...response.data,
+        hasGuarantor: response.data.guarantor ? true : false,
+        hasContract: response.data.contract ? true : false,
+      }))
+
+      toast.success('Profile image updated successfully')
+
+    } catch (error) {
+      console.error('Upload error details:', error.response?.data || error.message)
+      const errorMessage = error.response?.data?.message || 'Failed to upload profile image'
+      toast.error(errorMessage)
+    } finally {
+      setUploadingImage(false)
+    }
+  }
+
   const EditDebtNotesById = async (debtNoteId) => {
     setLoading(true)
     try {
+      // Prepare the main update payload
       const updatePayload = {
         debtorName: currentDebtNote.debtorName,
         debtorEmail: currentDebtNote.debtorEmail,
         debtorPhone: currentDebtNote.debtorPhone,
+        debtorAddress: currentDebtNote.debtorAddress,
         amount: currentDebtNote.amount,
         dueDate: currentDebtNote.dueDate,
         status: currentDebtNote.status,
         archivedAt: currentDebtNote.archivedAt,
+        guarantorName: currentDebtNote.hasGuarantor && currentDebtNote.guarantor ? currentDebtNote.guarantor.name || '' : '',
+        guarantorPhone: currentDebtNote.hasGuarantor && currentDebtNote.guarantor ? currentDebtNote.guarantor.phone || '' : '',
       }
+
+      // Add contract data if hasContract is true
+      if (currentDebtNote.hasContract) {
+        updatePayload.interestEnabled = currentDebtNote.contract?.interest?.enabled || false
+        updatePayload.interestEveryDays = currentDebtNote.contract?.interest?.everyDays || 0
+        updatePayload.interestChargeAmount = currentDebtNote.contract?.interest?.chargeAmount || 0
+        updatePayload.lateFeeEnabled = currentDebtNote.contract?.lateFee?.enabled || false
+        updatePayload.lateFeeEveryDays = currentDebtNote.contract?.lateFee?.everyDays || 0
+        updatePayload.lateFeeChargeAmount = currentDebtNote.contract?.lateFee?.chargeAmount || 0
+      }
+
+      // Make the single API call
       const res = await axiosInstance.put(`/debt-notes/${debtNoteId}`, updatePayload)
-      setCurrentDebtNote(res.data)
+
+      // Update the local state
+      setCurrentDebtNote({
+        ...res.data,
+        hasGuarantor: res.data.guarantor ? true : false,
+        hasContract: res.data.contract ? true : false,
+      })
+
       toast.success('Debt note updated successfully')
+
+      // Optional: reload after a short delay to reflect changes
       setTimeout(() => {
         window.location.reload()
       }, 400)
     } catch (error) {
+      console.error('Update error:', error)
       toast.error('Failed to update debt note')
     } finally {
       setLoading(false)
     }
   }
+
 
   const DeleteDebtNotesById = async (debtNoteId) => {
     setLoading(true)
@@ -163,7 +293,7 @@ const DebtNotePage = () => {
       setLoading(false)
     }
   }
-  // PDF export using html-to-image + jsPDF
+
   const exportAsPDF = async () => {
     if (!exportRef.current) {
       toast.error('Export element not found')
@@ -177,10 +307,9 @@ const DebtNotePage = () => {
 
       const element = exportRef.current
 
-      // Generate high-quality PNG
       const imgData = await toPng(element, {
         cacheBust: true,
-        pixelRatio: 2, // higher = sharper
+        pixelRatio: 2,
         backgroundColor: "#ffffff",
       })
 
@@ -199,7 +328,7 @@ const DebtNotePage = () => {
       const finalWidth = img.width * ratio
       const finalHeight = img.height * ratio
       const x = (pdfWidth - finalWidth) / 2
-      const y = 10 // margin top
+      const y = 10
 
       pdf.addImage(img, "PNG", x, y, finalWidth, finalHeight)
 
@@ -215,21 +344,17 @@ const DebtNotePage = () => {
     }
   }
 
-
-  // Check if email type is on cooldown
   const isEmailOnCooldown = (emailType) => {
-    const cooldownTime = 5 * 60 * 1000 // 5 minutes in milliseconds
+    const cooldownTime = 5 * 60 * 1000
     return Date.now() - emailCooldowns[emailType] < cooldownTime
   }
 
-  // Get remaining cooldown time in minutes
   const getCooldownTimeRemaining = (emailType) => {
     const cooldownTime = 5 * 60 * 1000
     const remaining = cooldownTime - (Date.now() - emailCooldowns[emailType])
     return Math.ceil(remaining / (60 * 1000))
   }
 
-  // Handle email type selection
   const handleEmailTypeSelect = (emailType) => {
     if (isEmailOnCooldown(emailType)) {
       const remainingMinutes = getCooldownTimeRemaining(emailType)
@@ -247,7 +372,6 @@ const DebtNotePage = () => {
     setConfirmDialogOpen(true)
   }
 
-  // Send email using EmailJS - Updated to match template variables
   const sendEmailReminder = async () => {
     setSendingEmail(true)
 
@@ -257,7 +381,6 @@ const DebtNotePage = () => {
       const today = moment()
       const daysOverdue = today.diff(dueDate, 'days')
 
-      // Template parameters matching EmailJS template variables
       const templateParams = {
         amount: currentDebtNote.amount,
         due_date: dueDate.format('MMMM D, YYYY'),
@@ -280,7 +403,6 @@ const DebtNotePage = () => {
         EMAILJS_CONFIG.publicKey
       )
 
-      // Update cooldown for this email type
       setEmailCooldowns(prev => ({
         ...prev,
         [selectedEmailType]: Date.now()
@@ -354,12 +476,30 @@ const DebtNotePage = () => {
 
   return (
     <div>
+      <div className="p-6">
+        <button
+          onClick={() => navigate('/')}
+          className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors shadow-sm"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back</span>
+        </button>
+      </div>
+
       <Tabs defaultValue="read">
         <div className="flex justify-center mt-6">
           <TabsList className="flex justify-center">
             <TabsTrigger value="read">
               <FileSpreadsheet className="w-4 h-4 mr-2" />
               <span>View Details</span>
+            </TabsTrigger>
+            <TabsTrigger value="profile">
+              <User className="w-4 h-4 mr-2" />
+              <span>Profile</span>
+            </TabsTrigger>
+            <TabsTrigger value="contract">
+              <FileCheck className="w-4 h-4 mr-2" />
+              <span>Contract</span>
             </TabsTrigger>
             <TabsTrigger value="edit">
               <SquarePen className="w-4 h-4 mr-2" />
@@ -371,7 +511,6 @@ const DebtNotePage = () => {
         {/* Read Tab */}
         <TabsContent value="read">
           <div className="p-6 bg-white border border-gray-200 rounded-xl shadow-lg max-w-4xl mx-auto mt-6 space-y-6 relative">
-            {/* Export Section - This is what gets captured */}
             <div ref={exportRef} className="space-y-6 relative">
               <div className="absolute top-6 right-6 text-xs text-gray-400 text-right">
                 <div>{moment(currentDebtNote.createdAt).format('MMM D, YYYY')}</div>
@@ -399,12 +538,12 @@ const DebtNotePage = () => {
                 </div>
               </div>
 
-              {/* Debtor Info & Timeline */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-3">
                   <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">
                     Debtor Information
                   </h3>
+
                   <div className="flex items-center space-x-3">
                     <User className="w-4 h-4 text-gray-500" />
                     <div>
@@ -432,6 +571,16 @@ const DebtNotePage = () => {
                       </div>
                     </div>
                   )}
+
+                  {currentDebtNote.debtorAddress && (
+                    <div className="flex items-center space-x-3">
+                      <MapPin className="w-4 h-4 text-gray-500" />
+                      <div>
+                        <div className="text-sm text-gray-500">Address</div>
+                        <div className="font-medium">{currentDebtNote.debtorAddress}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3">
@@ -449,16 +598,47 @@ const DebtNotePage = () => {
                   </div>
                 </div>
               </div>
+
+              {currentDebtNote.hasGuarantor && currentDebtNote.guarantor && (
+                <div className="border-t pt-4">
+                  <h3 className="text-lg font-semibold text-gray-800 border-b pb-2 mb-3 flex items-center">
+                    <Shield className="w-5 h-5 mr-2 text-blue-600" />
+                    Guarantor Information
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <UserCheck className="w-4 h-4 text-gray-500" />
+                        <div>
+                          <div className="text-sm text-gray-500">Name</div>
+                          <div className="font-medium">{currentDebtNote.guarantor.name || 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      {currentDebtNote.guarantor.phone && (
+                        <div className="flex items-center space-x-3">
+                          <Phone className="w-4 h-4 text-gray-500" />
+                          <div>
+                            <div className="text-sm text-gray-500">Phone</div>
+                            <div className="font-medium">{currentDebtNote.guarantor.phone}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* Action Buttons - Outside the export area */}
             <div className="flex justify-end space-x-3">
-              {/* PDF Export Button */}
               <Button
                 variant="outline"
                 className="flex items-center space-x-2"
                 disabled={exporting}
-                onClick={exportAsPDF} // direct download now
+                onClick={exportAsPDF}
               >
                 {exporting ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
@@ -470,7 +650,6 @@ const DebtNotePage = () => {
                 )}
               </Button>
 
-              {/* Email Dialog */}
               <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
                 <DialogTrigger asChild>
                   <Button
@@ -548,7 +727,6 @@ const DebtNotePage = () => {
                 </DialogContent>
               </Dialog>
 
-              {/* Confirmation Dialog */}
               <AlertDialog open={confirmDialogOpen} onOpenChange={setConfirmDialogOpen}>
                 <AlertDialogContent>
                   <AlertDialogHeader>
@@ -588,204 +766,952 @@ const DebtNotePage = () => {
           </div>
         </TabsContent>
 
-        {/* Edit Tab */}
-        <TabsContent value="edit">
-  <div className="p-6 bg-white border border-gray-200 rounded-xl shadow-lg max-w-4xl mx-auto mt-6 space-y-6">
-    <h2 className="text-2xl font-bold text-gray-800 mb-6">Edit Debt Record</h2>
-
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Left Column */}
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Debtor Name *</label>
-          <input
-            type="text"
-            value={currentDebtNote.debtorName || ""}
-            onChange={(e) =>
-              setCurrentDebtNote({ ...currentDebtNote, debtorName: e.target.value })
-            }
-            placeholder="Enter debtor name"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-          <input
-            type="email"
-            value={currentDebtNote.debtorEmail || ""}
-            onChange={(e) =>
-              setCurrentDebtNote({ ...currentDebtNote, debtorEmail: e.target.value })
-            }
-            placeholder="Enter email address"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-          <input
-            type="tel"
-            value={currentDebtNote.debtorPhone || ""}
-            onChange={(e) =>
-              setCurrentDebtNote({ ...currentDebtNote, debtorPhone: e.target.value })
-            }
-            placeholder="Enter phone number"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-      </div>
-
-      {/* Right Column */}
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Amount *</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={currentDebtNote.amount || ""}
-            onChange={(e) =>
-              setCurrentDebtNote({
-                ...currentDebtNote,
-                amount: parseFloat(e.target.value),
-              })
-            }
-            placeholder="0.00"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Due Date *</label>
-          <input
-            type="date"
-            value={
-              currentDebtNote.dueDate
-                ? moment(currentDebtNote.dueDate).format("YYYY-MM-DD")
-                : ""
-            }
-            onChange={(e) =>
-              setCurrentDebtNote({ ...currentDebtNote, dueDate: e.target.value })
-            }
-            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-          {currentDebtNote.dueDate ? (
-            <select
-              value={currentDebtNote.status || "pending"}
-              onChange={(e) =>
-                setCurrentDebtNote({ ...currentDebtNote, status: e.target.value })
-              }
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        {/* Profile Tab */}
+        <TabsContent value="profile">
+          {showProfileModal && (currentDebtNote.profileImage || currentDebtNote.debtorProfilePic) && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+              onClick={() => setShowProfileModal(false)}
             >
-              {/* Pending allowed if today or future */}
-              <option
-                value="pending"
-                disabled={
-                  new Date(currentDebtNote.dueDate).setHours(0, 0, 0, 0) <
-                  new Date().setHours(0, 0, 0, 0)
-                }
-              >
-                Pending
-              </option>
-
-              <option value="paid">Paid</option>
-
-              {/* Overdue only if past */}
-              <option
-                value="overdue"
-                disabled={
-                  new Date(currentDebtNote.dueDate).setHours(0, 0, 0, 0) >=
-                  new Date().setHours(0, 0, 0, 0)
-                }
-              >
-                Overdue
-              </option>
-
-              <option value="cancelled">Cancelled</option>
-            </select>
-          ) : (
-            <p className="text-sm text-gray-500 italic">
-              Please select a due date before setting a status.
-            </p>
+              <div className="relative max-w-4xl max-h-[90vh]">
+                <button
+                  onClick={() => setShowProfileModal(false)}
+                  className="absolute -top-12 right-0 text-white hover:text-gray-300 transition-colors"
+                >
+                  <X className="w-8 h-8" />
+                </button>
+                <img
+                  src={currentDebtNote.profileImage || currentDebtNote.debtorProfilePic}
+                  alt="Profile - Full View"
+                  className="max-w-full max-h-[90vh] rounded-lg shadow-2xl"
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
           )}
+
+          <div className="max-w-4xl mx-auto mt-6 space-y-6">
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="h-24 bg-gradient-to-r from-slate-700 to-slate-800"></div>
+
+              <div className="px-8 pb-8">
+                <div className="flex flex-col md:flex-row md:items-end md:space-x-6">
+                  <div className="-mt-12 mb-4 md:mb-0">
+                    <div className="relative">
+                      {(currentDebtNote.profileImage || currentDebtNote.debtorProfilePic) ? (
+                        <img
+                          src={currentDebtNote.profileImage || currentDebtNote.debtorProfilePic}
+                          alt="Profile"
+                          className="w-24 h-24 rounded-xl object-cover border-4 border-white shadow-lg cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => setShowProfileModal(true)}
+                        />
+                      ) : (
+                        <div className="w-24 h-24 rounded-xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center border-4 border-white shadow-lg">
+                          <User className="w-12 h-12 text-slate-400" />
+                        </div>
+                      )}
+                      <div className={`absolute bottom-1 right-1 w-5 h-5 rounded-full border-2 border-white shadow-sm ${currentDebtNote.status === 'paid' ? 'bg-emerald-500' :
+                        currentDebtNote.status === 'overdue' ? 'bg-rose-500' :
+                          currentDebtNote.status === 'cancelled' ? 'bg-slate-400' :
+                            'bg-amber-500'
+                        }`}></div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1">
+                    <h2 className="text-2xl font-semibold text-slate-900 mb-2">
+                      {currentDebtNote.debtorName || 'N/A'}
+                    </h2>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium uppercase tracking-wide ${getStatusColor(
+                          currentDebtNote.status
+                        )}`}
+                      >
+                        {currentDebtNote.status || 'PENDING'}
+                      </span>
+                      <span className="text-sm text-slate-600 flex items-center">
+                        <Calendar className="w-4 h-4 mr-1.5" />
+                        Created {moment(currentDebtNote.createdAt).format('MMM D, YYYY')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 md:mt-0">
+                    <div className="bg-slate-50 border border-slate-200 rounded-xl px-6 py-3.5 text-center">
+                      <div className="text-xs font-medium text-slate-600 mb-1">Outstanding Amount</div>
+                      <div className="text-xl font-semibold text-slate-900">
+                        {formatCurrency(currentDebtNote.amount)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                <h3 className="text-base font-semibold text-slate-900 mb-5 pb-3 border-b border-slate-100 flex items-center">
+                  <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center mr-2.5">
+                    <Mail className="w-4 h-4 text-blue-600" />
+                  </div>
+                  Contact Information
+                </h3>
+
+                <div className="space-y-4">
+                  <div className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0 border border-slate-200">
+                      <Mail className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-slate-500 mb-1">Email Address</div>
+                      <div className="text-sm text-slate-900 break-all">
+                        {currentDebtNote.debtorEmail || <span className="text-slate-400 italic">Not provided</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0 border border-slate-200">
+                      <Phone className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-slate-500 mb-1">Phone Number</div>
+                      <div className="text-sm text-slate-900">
+                        {currentDebtNote.debtorPhone || <span className="text-slate-400 italic">Not provided</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                    <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0 border border-slate-200">
+                      <MapPin className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-xs font-medium text-slate-500 mb-1">Address</div>
+                      <div className="text-sm text-slate-900">
+                        {currentDebtNote.debtorAddress || <span className="text-slate-400 italic">Not provided</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                <h3 className="text-base font-semibold text-slate-900 mb-5 pb-3 border-b border-slate-100 flex items-center">
+                  <div className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center mr-2.5">
+                    <Calendar className="w-4 h-4 text-amber-600" />
+                  </div>
+                  Payment Timeline
+                </h3>
+
+                <div className="space-y-4">
+                  <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl border border-amber-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-amber-700">Due Date</span>
+                      {moment(currentDebtNote.dueDate).isBefore(moment(), 'day') && currentDebtNote.status !== 'paid' && (
+                        <span className="px-2.5 py-1 bg-rose-600 text-white text-xs font-medium rounded-lg">
+                          OVERDUE
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-base font-semibold text-slate-900">
+                      {moment(currentDebtNote.dueDate).format('MMMM D, YYYY')}
+                    </div>
+                    <div className="text-xs text-amber-700 mt-1">
+                      {moment(currentDebtNote.dueDate).fromNow()}
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl border border-blue-200">
+                    <div className="text-xs font-medium text-blue-700 mb-2">Payment Status</div>
+                    <div className="text-base font-semibold">
+                      {currentDebtNote.status === 'paid' ? (
+                        <span className="text-emerald-600">Paid ✓</span>
+                      ) : moment(currentDebtNote.dueDate).isBefore(moment(), 'day') ? (
+                        <span className="text-rose-600">
+                          {Math.abs(moment(currentDebtNote.dueDate).diff(moment(), 'days'))} days overdue
+                        </span>
+                      ) : (
+                        <span className="text-slate-900">
+                          {moment(currentDebtNote.dueDate).diff(moment(), 'days')} days remaining
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <Clock className="w-4 h-4 text-slate-500 mb-1.5" />
+                      <div className="text-xs text-slate-600">Created</div>
+                      <div className="text-sm font-medium text-slate-900 mt-1">
+                        {moment(currentDebtNote.createdAt).format('MMM D, YYYY')}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <DollarSign className="w-4 h-4 text-slate-500 mb-1.5" />
+                      <div className="text-xs text-slate-600">Amount</div>
+                      <div className="text-sm font-medium text-slate-900 mt-1">
+                        {formatCurrency(currentDebtNote.amount)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {currentDebtNote.hasGuarantor && currentDebtNote.guarantor && (
+              <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+                <h3 className="text-base font-semibold text-slate-900 mb-5 pb-3 border-b border-slate-100 flex items-center">
+                  <div className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center mr-2.5">
+                    <Shield className="w-4 h-4 text-indigo-600" />
+                  </div>
+                  Guarantor Information
+                </h3>
+
+                <div className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 p-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="flex items-start space-x-3">
+                      <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0 border border-indigo-200">
+                        <UserCheck className="w-4 h-4 text-indigo-600" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-indigo-700 mb-1">Guarantor Name</div>
+                        <div className="text-sm font-semibold text-slate-900">
+                          {currentDebtNote.guarantor.name || 'N/A'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {currentDebtNote.guarantor.phone && (
+                      <div className="flex items-start space-x-3">
+                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center flex-shrink-0 border border-indigo-200">
+                          <Phone className="w-4 h-4 text-indigo-600" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-medium text-indigo-700 mb-1">Phone Number</div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            {currentDebtNote.guarantor.phone}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-white/60 rounded-lg border border-indigo-100">
+                    <p className="text-xs text-slate-700 flex items-start">
+                      <Shield className="w-3 h-3 mr-1.5 flex-shrink-0 mt-0.5 text-indigo-600" />
+                      This person has agreed to be responsible for the debt if the primary debtor cannot pay.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Contract Tab */}
+<TabsContent value="contract">
+  <div className="max-w-4xl mx-auto mt-6 space-y-8">
+    {/* Contract Overview */}
+    <div className="bg-white border border-gray-200 rounded-xl shadow p-6">
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Contract Terms</h2>
+          <p className="text-gray-600 mt-1">
+            {currentDebtNote.hasContract
+              ? 'Review the interest and late fee terms for this debt.'
+              : 'No contract terms have been set for this debt note.'}
+          </p>
+        </div>
+        <div className={`px-4 py-2 rounded-lg text-sm font-medium ${currentDebtNote.hasContract ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-gray-100 text-gray-700 border border-gray-300'}`}>
+          {currentDebtNote.hasContract ? 'Contract Active' : 'No Contract'}
         </div>
       </div>
+
+      {!currentDebtNote.hasContract && (
+        <div className="text-center py-12 text-gray-500">
+          <p className="mb-4">No contract terms have been configured yet.</p>
+          <p className="text-sm text-gray-400">
+            Go to the Edit tab to add contract terms including interest and late fee settings.
+          </p>
+        </div>
+      )}
+
+      {currentDebtNote.hasContract && currentDebtNote.contract && (
+        <div className="space-y-6">
+          {/* Interest & Late Fee Table */}
+          <div className="grid md:grid-cols-2 gap-6">
+            {/* Interest Card */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Interest Terms</h3>
+              {currentDebtNote.contract.interest?.enabled ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Interest Enabled</span>
+                    <span className="font-medium text-gray-900">Yes</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Charge Frequency</span>
+                    <span className="font-medium text-gray-900">
+                      Every {currentDebtNote.contract.interest.everyDays} days
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Charge Amount</span>
+                    <span className="font-medium text-gray-900">
+                      {formatCurrency(currentDebtNote.contract.interest.chargeAmount)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-3">Interest charges are not enabled.</p>
+              )}
+            </div>
+
+            {/* Late Fee Card */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">Late Fee Terms</h3>
+              {currentDebtNote.contract.lateFee?.enabled ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Late Fee Enabled</span>
+                    <span className="font-medium text-gray-900">Yes</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Charge Frequency</span>
+                    <span className="font-medium text-gray-900">
+                      Every {currentDebtNote.contract.lateFee.everyDays} days overdue
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Charge Amount</span>
+                    <span className="font-medium text-gray-900">
+                      {formatCurrency(currentDebtNote.contract.lateFee.chargeAmount)}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-3">Late fees are not enabled.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Contract Date */}
+          <div className="text-sm text-gray-500 text-center">
+            Contract created on {moment(currentDebtNote.contract.createdAt).format('MMMM D, YYYY [at] h:mm A')}
+          </div>
+        </div>
+      )}
     </div>
 
-    <div className="flex justify-end space-x-3 pt-6 border-t">
-      {/* Delete Button */}
-      <button
-        onClick={() => DeleteDebtNotesById(id)}
-        disabled={loading}
-        className="inline-flex items-center px-4 py-2 
-               bg-gray-100 text-gray-700 font-medium rounded-md
-               border border-gray-300
-               hover:bg-gray-200 hover:text-gray-900
-               focus:outline-none focus:ring-2 focus:ring-gray-300/50
-               disabled:opacity-50 disabled:cursor-not-allowed
-               transition-all"
-      >
-        {loading ? (
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-        ) : (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 mr-2"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
+    {/* Calculate Total Due */}
+    {currentDebtNote.hasContract && (
+      <div className="bg-white border border-gray-200 rounded-xl shadow p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">Calculate Total Amount Due</h3>
+            <p className="text-gray-600 mt-1">
+              See how much is owed including interest and late fees.
+            </p>
+          </div>
+          <Button
+            onClick={fetchCalculatedAmounts}
+            disabled={calculatingAmounts}
+            className="px-5 py-2 bg-black text-white rounded-md hover:bg-gray-800 font-medium"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
-        )}
-        {loading ? "Deleting…" : "Delete"}
-      </button>
+            {calculatingAmounts ? 'Calculating...' : 'Calculate Now'}
+          </Button>
+        </div>
 
-      {/* Save Button */}
-      <button
-        onClick={() => EditDebtNotesById(id)}
-        disabled={loading}
-        className="inline-flex items-center px-4 py-2 
-               bg-blue-500 text-white font-medium rounded-md
-               hover:bg-blue-600
-               focus:outline-none focus:ring-2 focus:ring-blue-400/50
-               disabled:opacity-50 disabled:cursor-not-allowed
-               transition-all"
-      >
-        {loading ? (
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-        ) : (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-4 w-4 mr-2"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
+        {calculatedAmounts && (
+          <div className="space-y-4">
+            {/* Amount Summary */}
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="p-4 border border-gray-200 rounded-lg text-center bg-gray-50">
+                <div className="text-xs text-gray-600 mb-1">Original Amount</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {formatCurrency(calculatedAmounts.originalAmount)}
+                </div>
+              </div>
+              <div className="p-4 border border-gray-200 rounded-lg text-center bg-gray-50">
+                <div className="text-xs text-gray-600 mb-1">Interest Charges</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {formatCurrency(calculatedAmounts.interestAmount)}
+                </div>
+              </div>
+              <div className="p-4 border border-gray-200 rounded-lg text-center bg-gray-50">
+                <div className="text-xs text-gray-600 mb-1">Late Fees</div>
+                <div className="text-lg font-semibold text-gray-900">
+                  {formatCurrency(calculatedAmounts.lateFeeAmount)}
+                </div>
+              </div>
+            </div>
+
+            {/* Total Due */}
+            <div className="p-4 border border-gray-200 rounded-lg text-center bg-gray-50">
+              <div className="text-sm text-gray-600 mb-1">Total Amount Due</div>
+              <div className="text-2xl font-bold text-gray-900">
+                {formatCurrency(calculatedAmounts.totalDue)}
+              </div>
+            </div>
+
+            {/* Breakdown */}
+            <div className="grid md:grid-cols-3 gap-4">
+              <div className="p-3 border border-gray-200 rounded-lg text-center bg-white">
+                <div className="text-xs text-gray-600 mb-1">Days from Creation</div>
+                <div className="text-sm font-medium text-gray-900">
+                  {calculatedAmounts.breakdown.daysFromCreation} days
+                </div>
+              </div>
+              <div className="p-3 border border-gray-200 rounded-lg text-center bg-white">
+                <div className="text-xs text-gray-600 mb-1">Days Until Due</div>
+                <div className="text-sm font-medium text-gray-900">
+                  {calculatedAmounts.breakdown.daysUntilDue >= 0
+                    ? `${calculatedAmounts.breakdown.daysUntilDue} days`
+                    : 'Past due'}
+                </div>
+              </div>
+              <div className="p-3 border border-gray-200 rounded-lg text-center bg-white">
+                <div className="text-xs text-gray-600 mb-1">Days Overdue</div>
+                <div className={`text-sm font-medium ${calculatedAmounts.breakdown.daysOverdue > 0 ? 'text-rose-600' : 'text-gray-900'}`}>
+                  {calculatedAmounts.breakdown.daysOverdue > 0
+                    ? `${calculatedAmounts.breakdown.daysOverdue} days`
+                    : 'Not overdue'}
+                </div>
+              </div>
+            </div>
+          </div>
         )}
-        {loading ? "Saving…" : "Save Changes"}
-      </button>
-    </div>
+      </div>
+    )}
   </div>
 </TabsContent>
 
+
+
+
+        {/* Edit Tab */}
+        <TabsContent value="edit">
+          <div className="p-6 bg-white border border-gray-200 rounded-xl shadow-lg max-w-4xl mx-auto mt-6 space-y-6">
+            <h2 className="text-2xl font-bold text-gray-800 mb-6">Edit Debt Record</h2>
+
+            {/* Profile Image Section */}
+            <div className="border-b pb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <Camera className="w-5 h-5 mr-2" />
+                Profile Image
+              </h3>
+              <div className="flex items-center space-x-4">
+                <div className="relative">
+                  {(currentDebtNote.profileImage || currentDebtNote.debtorProfilePic) ? (
+                    <img
+                      src={currentDebtNote.profileImage || currentDebtNote.debtorProfilePic}
+                      alt="Profile"
+                      className="w-20 h-20 rounded-full object-cover border-2 border-gray-300"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center border-2 border-gray-300">
+                      <User className="w-8 h-8 text-gray-400" />
+                    </div>
+                  )}
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    className="absolute -bottom-2 -right-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-2 shadow-lg transition-colors"
+                  >
+                    {uploadingImage ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    ) : (
+                      <Camera className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600 mb-1">Click the camera icon to upload a profile image</p>
+                  <p className="text-xs text-gray-400">Supported: JPG, PNG, GIF (max 5MB)</p>
+                </div>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleProfileImageUpload}
+                className="hidden"
+              />
+            </div>
+
+            {/* Debtor Information Section */}
+            <div className="border-b pb-6">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <User className="w-5 h-5 mr-2" />
+                Debtor Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Debtor Name *</label>
+                    <input
+                      type="text"
+                      value={currentDebtNote.debtorName || ""}
+                      onChange={(e) =>
+                        setCurrentDebtNote({ ...currentDebtNote, debtorName: e.target.value })
+                      }
+                      placeholder="Enter debtor name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={currentDebtNote.debtorEmail || ""}
+                      onChange={(e) =>
+                        setCurrentDebtNote({ ...currentDebtNote, debtorEmail: e.target.value })
+                      }
+                      placeholder="Enter email address"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                    <input
+                      type="tel"
+                      value={currentDebtNote.debtorPhone || ""}
+                      onChange={(e) =>
+                        setCurrentDebtNote({ ...currentDebtNote, debtorPhone: e.target.value })
+                      }
+                      placeholder="Enter phone number"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Amount *</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={currentDebtNote.amount || ""}
+                      onChange={(e) =>
+                        setCurrentDebtNote({
+                          ...currentDebtNote,
+                          amount: parseFloat(e.target.value),
+                        })
+                      }
+                      placeholder="0.00"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Due Date *</label>
+                    <input
+                      type="date"
+                      value={
+                        currentDebtNote.dueDate
+                          ? moment(currentDebtNote.dueDate).format("YYYY-MM-DD")
+                          : ""
+                      }
+                      onChange={(e) =>
+                        setCurrentDebtNote({ ...currentDebtNote, dueDate: e.target.value })
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    {currentDebtNote.dueDate ? (
+                      <select
+                        value={currentDebtNote.status || "pending"}
+                        onChange={(e) =>
+                          setCurrentDebtNote({ ...currentDebtNote, status: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      >
+                        <option
+                          value="pending"
+                          disabled={
+                            new Date(currentDebtNote.dueDate).setHours(0, 0, 0, 0) <
+                            new Date().setHours(0, 0, 0, 0)
+                          }
+                        >
+                          Pending
+                        </option>
+                        <option value="paid">Paid</option>
+                        <option
+                          value="overdue"
+                          disabled={
+                            new Date(currentDebtNote.dueDate).setHours(0, 0, 0, 0) >=
+                            new Date().setHours(0, 0, 0, 0)
+                          }
+                        >
+                          Overdue
+                        </option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic">
+                        Please select a due date before setting a status.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <MapPin className="w-4 h-4 inline mr-1" />
+                  Address
+                </label>
+                <textarea
+                  value={currentDebtNote.debtorAddress || ""}
+                  onChange={(e) =>
+                    setCurrentDebtNote({ ...currentDebtNote, debtorAddress: e.target.value })
+                  }
+                  placeholder="Enter full address"
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-vertical"
+                />
+              </div>
+            </div>
+
+            {/* Guarantor Section */}
+            <div className="border-b pb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+                  <Shield className="w-5 h-5 mr-2 text-blue-600" />
+                  Guarantor Information
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentDebtNote(prev => ({
+                      ...prev,
+                      hasGuarantor: !prev.hasGuarantor,
+                      guarantor: prev.hasGuarantor ? null : {
+                        name: '',
+                        phone: ''
+                      }
+                    }))
+                  }}
+                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentDebtNote.hasGuarantor
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                    }`}
+                >
+                  {currentDebtNote.hasGuarantor ? (
+                    <>
+                      <X className="w-4 h-4 mr-1" />
+                      Remove Guarantor
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-1" />
+                      Add Guarantor
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {currentDebtNote.hasGuarantor && (
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Guarantor Name *</label>
+                      <input
+                        type="text"
+                        value={currentDebtNote.guarantor?.name || ""}
+                        onChange={(e) =>
+                          setCurrentDebtNote({
+                            ...currentDebtNote,
+                            guarantor: {
+                              ...currentDebtNote.guarantor,
+                              name: e.target.value
+                            }
+                          })
+                        }
+                        placeholder="Enter guarantor name"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Guarantor Phone</label>
+                      <input
+                        type="tel"
+                        value={currentDebtNote.guarantor?.phone || ""}
+                        onChange={(e) =>
+                          setCurrentDebtNote({
+                            ...currentDebtNote,
+                            guarantor: {
+                              ...currentDebtNote.guarantor,
+                              phone: e.target.value
+                            }
+                          })
+                        }
+                        placeholder="Enter phone number"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3 p-3 bg-blue-100 rounded-md">
+                    <p className="text-xs text-blue-700">
+                      <Shield className="w-3 h-3 inline mr-1" />
+                      A guarantor is someone who agrees to be responsible for the debt if the primary debtor cannot pay.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Contract Section */}
+<div className="border-b pb-6">
+  {/* Header */}
+  <div className="flex items-center justify-between mb-4">
+    <h3 className="text-lg font-semibold text-gray-800">
+      Contract Terms
+    </h3>
+    <button
+      type="button"
+      onClick={() => {
+        setCurrentDebtNote(prev => ({
+          ...prev,
+          hasContract: !prev.hasContract,
+          contract: prev.hasContract
+            ? null
+            : {
+                interest: { enabled: false, everyDays: 30, chargeAmount: 0 },
+                lateFee: { enabled: false, everyDays: 7, chargeAmount: 0 },
+              },
+        }))
+      }}
+      className="px-3 py-2 border border-gray-300 rounded-md text-sm font-medium hover:bg-gray-50"
+    >
+      {currentDebtNote.hasContract ? 'Remove Contract' : 'Add Contract'}
+    </button>
+  </div>
+
+  {currentDebtNote.hasContract && (
+    <div className="space-y-6">
+      {/* Interest Settings */}
+      <div className="p-4 rounded-lg border border-gray-300">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold text-gray-800">Interest Charges</h4>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={currentDebtNote.contract?.interest?.enabled || false}
+              onChange={(e) =>
+                setCurrentDebtNote({
+                  ...currentDebtNote,
+                  contract: {
+                    ...currentDebtNote.contract,
+                    interest: {
+                      ...currentDebtNote.contract?.interest,
+                      enabled: e.target.checked,
+                    },
+                  },
+                })
+              }
+              className="mr-2 w-4 h-4 text-gray-700 rounded focus:ring focus:ring-gray-400"
+            />
+            <span className="text-sm font-medium text-gray-700">Enable Interest</span>
+          </label>
+        </div>
+
+        {currentDebtNote.contract?.interest?.enabled && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Charge Every (days)
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={currentDebtNote.contract?.interest?.everyDays}
+                onChange={(e) =>
+                  setCurrentDebtNote({
+                    ...currentDebtNote,
+                    contract: {
+                      ...currentDebtNote.contract,
+                      interest: {
+                        ...currentDebtNote.contract?.interest,
+                        everyDays: parseInt(e.target.value),
+                      },
+                    },
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-gray-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Charge Amount ($)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={currentDebtNote.contract?.interest?.chargeAmount}
+                onChange={(e) =>
+                  setCurrentDebtNote({
+                    ...currentDebtNote,
+                    contract: {
+                      ...currentDebtNote.contract,
+                      interest: {
+                        ...currentDebtNote.contract?.interest,
+                        chargeAmount: parseFloat(e.target.value),
+                      },
+                    },
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-gray-400"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Late Fee Settings */}
+      <div className="p-4 rounded-lg border border-gray-300">
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-semibold text-gray-800">Late Fee Charges</h4>
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={currentDebtNote.contract?.lateFee?.enabled || false}
+              onChange={(e) =>
+                setCurrentDebtNote({
+                  ...currentDebtNote,
+                  contract: {
+                    ...currentDebtNote.contract,
+                    lateFee: {
+                      ...currentDebtNote.contract?.lateFee,
+                      enabled: e.target.checked,
+                    },
+                  },
+                })
+              }
+              className="mr-2 w-4 h-4 text-gray-700 rounded focus:ring focus:ring-gray-400"
+            />
+            <span className="text-sm font-medium text-gray-700">Enable Late Fee</span>
+          </label>
+        </div>
+
+        {currentDebtNote.contract?.lateFee?.enabled && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Charge Every (days overdue)
+              </label>
+              <input
+                type="number"
+                min="1"
+                value={currentDebtNote.contract?.lateFee?.everyDays}
+                onChange={(e) =>
+                  setCurrentDebtNote({
+                    ...currentDebtNote,
+                    contract: {
+                      ...currentDebtNote.contract,
+                      lateFee: {
+                        ...currentDebtNote.contract?.lateFee,
+                        everyDays: parseInt(e.target.value),
+                      },
+                    },
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-gray-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Charge Amount ($)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={currentDebtNote.contract?.lateFee?.chargeAmount}
+                onChange={(e) =>
+                  setCurrentDebtNote({
+                    ...currentDebtNote,
+                    contract: {
+                      ...currentDebtNote.contract,
+                      lateFee: {
+                        ...currentDebtNote.contract?.lateFee,
+                        chargeAmount: parseFloat(e.target.value),
+                      },
+                    },
+                  })
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring focus:ring-gray-400"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div className="mt-3 p-3 rounded-md border border-gray-300 bg-white">
+        <p className="text-sm text-gray-700">
+          Contract terms define how interest and late fees are calculated. Interest charges apply from creation date to due date, while late fees apply after the due date.
+        </p>
+      </div>
+    </div>
+  )}
+</div>
+
+
+            {/* Action Buttons */}
+            <div className="flex justify-end space-x-3 pt-6">
+              <button
+                onClick={() => DeleteDebtNotesById(id)}
+                disabled={loading}
+                className="inline-flex items-center px-4 py-2 
+           bg-gray-100 text-gray-700 font-medium rounded-md
+           border border-gray-300
+           hover:bg-gray-200 hover:text-gray-900
+           focus:outline-none focus:ring-2 focus:ring-gray-300/50
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-all"
+              >
+                {loading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                ) : (
+                  <X className="h-4 w-4 mr-2" />
+                )}
+                {loading ? "Deleting…" : "Delete"}
+              </button>
+
+              <button
+                onClick={() => EditDebtNotesById(id)}
+                disabled={loading}
+                className="inline-flex items-center px-4 py-2 
+           bg-blue-500 text-white font-medium rounded-md
+           hover:bg-blue-600
+           focus:outline-none focus:ring-2 focus:ring-blue-400/50
+           disabled:opacity-50 disabled:cursor-not-allowed
+           transition-all"
+              >
+                {loading ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                ) : (
+                  <FileText className="h-4 w-4 mr-2" />
+                )}
+                {loading ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </TabsContent>
       </Tabs>
     </div>
   )

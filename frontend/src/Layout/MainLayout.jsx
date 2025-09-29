@@ -82,7 +82,7 @@ const MainLayout = () => {
         ) : (
           // Desktop layout with resizable sidebar
           <ResizablePanelGroup direction="horizontal">
-            <ResizablePanel defaultSize={20} minSize={15} maxSize={25}>
+            <ResizablePanel defaultSize={25} minSize={21} maxSize={25}>
               <LeftSideBar />
             </ResizablePanel>
             <ResizableHandle />

@@ -6,13 +6,12 @@ export const getAllDebtNotes = async (req, res) => {
     let debtNotes = await Debt.find({ clerkId });
 
     const today = new Date();
-    today.setHours(0, 0, 0, 0); // normalize to midnight
+    today.setHours(0, 0, 0, 0);
 
     const updates = debtNotes.map(async (note) => {
       const due = new Date(note.dueDate);
       due.setHours(0, 0, 0, 0);
 
-      // ✅ Only mark overdue if strictly before today
       if (note.status === "pending" && due < today) {
         note.status = "overdue";
         await note.save();
@@ -29,108 +28,222 @@ export const getAllDebtNotes = async (req, res) => {
   }
 };
 
-
-
-export const createDebtNotes = async(req, res) => {
-    try {
-        // destructure the data from the body
-        const {debtorName, debtorEmail, debtorPhone, amount, dueDate, status} = req.body
-        const clerkId = req.auth.userId; // Changed from req.user.userId to req.auth.userId
-
-        // create new debt note by using the model and then place those data into a new debt object 
-        const debtNote = new Debt({
-            debtorName, 
-            debtorEmail, 
-            debtorPhone, 
-            amount, 
-            dueDate, 
-            status,
-            clerkId: clerkId // Link note to user
-        }) 
-        
-        // save the debt note using the debtNote.save() function it will be saved to the debt database
-        const savedDebtNote = await debtNote.save()
-        
-        // send a response with a status of 201 which mean created successful 
-        res.status(201).json(savedDebtNote)
-    } catch (error) {
-        console.log("Full error:", error);
-        res.status(500).json({message: error.message})
-    }
-}
-
-export const deleteDebtNotes = async (req, res) => {
-    try {
-        const {id} = req.params
-        const clerkId = req.auth.userId; // Changed from req.user.clerkId to req.auth.userId
-        
-        // Only delete if note belongs to this user
-        const debtNote = await Debt.findOneAndDelete({ _id: id, clerkId: clerkId }) 
-        
-        if(!debtNote){
-            return res.status(404).json({message: "Debt note not found"})
-        }
-        
-        res.status(200).json(debtNote)
-    } catch (error) {
-        res.status(500).json({message: error.message})
-    }
-}
-
-export const updateDebtNotes = async (req, res) => {
+export const createDebtNotes = async (req, res) => {
   try {
-    const { id } = req.params;
-    const { debtorName, debtorEmail, debtorPhone, amount, dueDate, status, archivedAt } = req.body;
     const clerkId = req.auth.userId;
-
-    const note = await Debt.findOne({ _id: id, clerkId });
-    if (!note) return res.status(404).json({ message: "Debt note not found" });
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const due = new Date(dueDate);
-    due.setHours(0, 0, 0, 0);
-
-    let newStatus = status;
-
-    // ✅ Auto-overdue only if dueDate < today
-    if (status === "pending" && due < today) {
-      newStatus = "overdue";
-    }
-
-    note.set({
+    const {
       debtorName,
       debtorEmail,
       debtorPhone,
       amount,
       dueDate,
-      status: newStatus,
-      archivedAt,
+      status,
+      debtorAddress,
+    } = req.body;
+
+    const debtorProfilePic = req.file ? req.file.path : null;
+
+    const debtNote = new Debt({
+      clerkId,
+      debtorName,
+      debtorEmail,
+      debtorPhone,
+      debtorAddress,
+      debtorProfilePic,
+      amount,
+      dueDate,
+      status,
     });
 
-    const updatedNote = await note.save();
-    res.status(200).json(updatedNote);
+    const savedDebtNote = await debtNote.save();
+    res.status(201).json(savedDebtNote);
+  } catch (error) {
+    console.log("Full error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteDebtNotes = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const clerkId = req.auth.userId;
+
+    const debtNote = await Debt.findOneAndDelete({ _id: id, clerkId: clerkId });
+
+    if (!debtNote) {
+      return res.status(404).json({ message: "Debt note not found" });
+    }
+
+    res.status(200).json(debtNote);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
+export const updateDebtNotes = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const clerkId = req.auth.userId;
 
+    // Find the debt note
+    const note = await Debt.findOne({ _id: id, clerkId });
+    if (!note) {
+      return res.status(404).json({ message: "Debt note not found" });
+    }
+
+    // Check if this is a contract update
+    const isContractUpdate = req.body.interestEnabled !== undefined || 
+                            req.body.lateFeeEnabled !== undefined;
+
+    if (isContractUpdate) {
+      // Handle contract update
+      const {
+        interestEnabled,
+        interestEveryDays,
+        interestChargeAmount,
+        lateFeeEnabled,
+        lateFeeEveryDays,
+        lateFeeChargeAmount,
+      } = req.body;
+
+      // Update contract terms
+      note.contract = {
+        interest: {
+          enabled: interestEnabled || false,
+          everyDays: interestEnabled ? interestEveryDays : null,
+          chargeAmount: interestEnabled ? interestChargeAmount : null,
+        },
+        lateFee: {
+          enabled: lateFeeEnabled || false,
+          everyDays: lateFeeEnabled ? lateFeeEveryDays : null,
+          chargeAmount: lateFeeEnabled ? lateFeeChargeAmount : null,
+        },
+        createdAt: note.contract?.createdAt || new Date(),
+      };
+    } else {
+      // Handle regular debt note update
+      const {
+        debtorName,
+        debtorEmail,
+        debtorPhone,
+        amount,
+        dueDate,
+        status,
+        archivedAt,
+        debtorAddress,
+        guarantorName,
+        guarantorPhone,
+      } = req.body;
+
+      // Update profile picture if provided
+      if (req.file) {
+        note.debtorProfilePic = req.file.path;
+      }
+
+      // Update basic fields
+      note.set({
+        debtorName,
+        debtorEmail,
+        debtorPhone,
+        debtorAddress,
+        amount,
+        dueDate,
+        status,
+        archivedAt,
+      });
+
+      // Update guarantor information
+      if (guarantorName || guarantorPhone) {
+        note.guarantor = {
+          name: guarantorName || "",
+          phone: guarantorPhone || "",
+        };
+      } else {
+        note.guarantor = null;
+      }
+    }
+
+    const updatedNote = await note.save();
+    res.status(200).json(updatedNote);
+  } catch (error) {
+    console.log("Full error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
 
 export const getDebtNotesById = async (req, res) => {
-    try {
-        const {id} = req.params
-        const clerkId = req.auth.userId; // Changed from req.user.clerkId to req.auth.userId
-        
-        // Only get note if it belongs to this user
-        const debtNote = await Debt.findOne({ _id: id, clerkId: clerkId })
+  try {
+    const { id } = req.params;
+    const clerkId = req.auth.userId;
 
-        if(!debtNote){
-            return res.status(404).json({message: "Debt note not found"})
-        }
+    const debtNote = await Debt.findOne({ _id: id, clerkId: clerkId });
 
-        res.status(200).json(debtNote)
-    } catch (error) {
-        res.status(500).json({message: error.message})
+    if (!debtNote) {
+      return res.status(404).json({ message: "Debt note not found" });
     }
-}
+
+    res.status(200).json(debtNote);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const calculateTotalDue = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const clerkId = req.auth.userId;
+
+    const note = await Debt.findOne({ _id: id, clerkId });
+    if (!note) {
+      return res.status(404).json({ message: "Debt note not found" });
+    }
+
+    const today = new Date();
+    const endDate = note.status === "paid" && note.paidAt ? new Date(note.paidAt) : today;
+    const createdDate = new Date(note.createdAt);
+    const dueDate = new Date(note.dueDate);
+
+    let totalDue = note.amount;
+    let interestAmount = 0;
+    let lateFeeAmount = 0;
+
+    // -----------------------------
+    // Calculate Interest (from creation until today/paid)
+    // -----------------------------
+    if (note.contract?.interest?.enabled) {
+      const daysSinceCreation = Math.floor((endDate - createdDate) / (1000 * 60 * 60 * 24));
+      if (daysSinceCreation > 0) {
+        const periods = Math.floor(daysSinceCreation / note.contract.interest.everyDays);
+        interestAmount = periods * note.contract.interest.chargeAmount;
+      }
+    }
+
+    // -----------------------------
+    // Calculate Late Fee (only if past due)
+    // -----------------------------
+    if (note.contract?.lateFee?.enabled && endDate > dueDate) {
+      const daysLate = Math.floor((endDate - dueDate) / (1000 * 60 * 60 * 24));
+      if (daysLate > 0) {
+        const periods = Math.floor(daysLate / note.contract.lateFee.everyDays);
+        lateFeeAmount = periods * note.contract.lateFee.chargeAmount;
+      }
+    }
+
+    totalDue = note.amount + interestAmount + lateFeeAmount;
+
+    res.status(200).json({
+      originalAmount: note.amount,
+      interestAmount,
+      lateFeeAmount,
+      totalDue,
+      breakdown: {
+        daysSinceCreation: Math.floor((endDate - createdDate) / (1000 * 60 * 60 * 24)),
+        daysUntilDue: Math.floor((dueDate - endDate) / (1000 * 60 * 60 * 24)),
+        daysOverdue: endDate > dueDate ? Math.floor((endDate - dueDate) / (1000 * 60 * 60 * 24)) : 0,
+      },
+    });
+  } catch (error) {
+    console.log("Full error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
